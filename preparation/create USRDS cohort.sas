@@ -2,7 +2,7 @@ libname saf '\\nasn2ac.cc.emory.edu\surgery\SQOR\USRDS data\USRDS data (2021 SAF
 libname mdi "C:\Users\mdi\OneDrive - Emory University\Work\Jess-GenderDisparity\Data";
 libname safcrwk "\\nasn2ac.cc.emory.edu\surgery\SQOR\USRDS data\USRDS data (2021 SAF)\Crosswalk\10_Provider and physician crosswalk 2021";
 %include "C:\Users\mdi\OneDrive - Emory University\Work\Jess-GenderDisparity\Data\format.sas";
-libname a "C:\Users\mdi\OneDrive - Emory University\Desktop\Tx dashboard";
+libname a "C:\Users\mdi\OneDrive - Emory University\Desktop\";
 options nofmterr;
 
 *****************************************************************
@@ -83,7 +83,7 @@ run;
 *********************** Prepare referral data ***********************;
 data rf;
 	set mdi.rf_allnws;
-	if 2012 <= year(referral_date) <= 2020;
+	*if 2012 <= year(referral_date) <= 2020;
 	if USRDS_ID > .;
 run;
 
@@ -151,104 +151,90 @@ quit;
 
 data a.outcome_pt;
 	set TX_DENOM;
-	
+
 	* exclude preemptively waitlisted patietns;
 	if . < edate < first_se then delete;
 
 	* define preemptively referred patietns;
 	if . < referral_date < first_se then preempt_rf = 1; else preempt_rf = 0;
 
-	**** preemptively referred patients have all outcomes; 
-	if preempt_rf = 1 then do;
-		rf = 1; rf_1yr = 1; eval = 1; eval_3m = 1; eval_6m = 1; wl = 1; wl_6m = 1; wl_2yr = 1; 
+	** referral outcomes;
+	* overall referral;
+	if referral_date > . then rf = 1; else rf = 0;
+	* referral within 1 year;
+	if mdy(1, 1, 2015) <= first_se <= mdy(6, 30, 2019) then do;
+		rf_1yr_denom = 1;
+		if . < referral_date - first_se + 1 <= 365.25 then rf_1yr = 1; 
+		else rf_1yr = 0;
 	end;
 
-	else do;
-		** referral outcomes;
-		* overall referral;
-		if referral_date > . then rf = 1; else rf = 0;
-		* referral within 1 year;
-		if mdy(1, 1, 2015) <= first_se <= mdy(6, 30, 2019) then do;
-			if . < referral_date - first_se + 1 <= 365.25 then rf_1yr = 1; 
-			else rf_1yr = 0;
-		end;
+	** evaluation outcomes;
+	* overall evaluation;
+	if evaluation_start_date > . then eval = 1; else eval = 0;
+	* evaluation within 3 months;
+	if mdy(1, 1, 2015) <= referral_date <= mdy(3, 31, 2020) then do;
+		eval_3m_denom = 1;
+		if . < evaluation_start_date - referral_date + 1 <= 91.2501 then eval_3m = 1; 
+		else eval_3m = 0;
+	end;
+	* evaluation within 6 months;
+	if mdy(1, 1, 2015) <= referral_date <= mdy(12, 31, 2019) then do;
+		eval_6m_denom = 1;
+		if . < evaluation_start_date - referral_date + 1 <= 182.5 then eval_6m = 1; 
+		else eval_6m = 0;
+	end;
 
-		** evaluation outcomes;
-		* overall evaluation;
-		if evaluation_start_date > . then eval = 1; else eval = 0;
-		* evaluation within 3 months;
-		if mdy(1, 1, 2015) <= referral_date <= mdy(3, 31, 2020) then do;
-			if . < evaluation_start_date - referral_date + 1 <= 91.2501 then eval_3m = 1; 
-			else eval_3m = 0;
-		end;
-		* evaluation within 6 months;
-		if mdy(1, 1, 2015) <= referral_date <= mdy(12, 31, 2019) then do;
-			if . < evaluation_start_date - referral_date + 1 <= 182.5 then eval_6m = 1; 
-			else eval_6m = 0;
-		end;
-
-		** waitlisting outcomes;
-		* overall waitlisting;
-		if edate > . then wl = 1; else wl = 0;
-		* waitllisting within 6 months from evaluation;
-		if mdy(1, 1, 2015) <= evaluation_start_date <= mdy(6, 30, 2020) then do;
-			if . < edate - evaluation_start_date + 1 <= 182.5 then wl_6m = 1; 
-			else wl_6m = 0;
-		end;
-		* waitllisting within 2 years from dialysis start;
-		if mdy(1, 1, 2015) <= first_se <= mdy(12, 31, 2018) then do;
-			if . < edate - first_se + 1 <= 730.5 then wl_2yr = 1; 
-			else wl_2yr = 0;
-		end;
+	** waitlisting outcomes;
+	* overall waitlisting;
+	if edate > . then wl = 1; else wl = 0;
+	* waitllisting within 6 months from evaluation;
+	if mdy(1, 1, 2015) <= evaluation_start_date <= mdy(6, 30, 2020) then do;
+		wl_6m_denom = 1;
+		if . < edate - evaluation_start_date + 1 <= 182.5 then wl_6m = 1; 
+		else wl_6m = 0;
+	end;
+	* waitllisting within 2 years from dialysis start;
+	if mdy(1, 1, 2015) <= first_se <= mdy(12, 31, 2018) then do;
+		wl_2yr_denom = 1;
+		if . < edate - first_se + 1 <= 730.5 then wl_2yr = 1; 
+		else wl_2yr = 0;
 	end;
 run;
 
 proc sql;
-	create table tx_outcome_denom as 
-		select nw_denom as nw, txctr_denom as tx_ctr, count(*) as denom
-		from a.outcome_pt
-		group by nw_denom, txctr_denom;
-
 	create table a.tx_outcome as 
-		select a.nw, a.tx_ctr, 
-			   a.rf_1yr_cnt*100/b.denom as rf_1yr_pct, 
-			   a.eval_3m_pct, a.eval_6m_pct, a.wl_6m_pct,
-			   a.wl_2yr_cnt*100/b.denom as wl_2yr_pct
-		from (select nw, tx_ctr, 
-					 sum(rf_1yr) as rf_1yr_cnt, 
-					 sum(eval_3m)*100/count(eval_3m) as eval_3m_pct, 
-					 sum(eval_6m)*100/count(eval_6m) as eval_6m_pct, 
-					 sum(wl_6m)*100/count(wl_6m) as wl_6m_pct, 
-					 sum(wl_2yr) as wl_2yr_cnt 
-					 from a.outcome_pt 
-					 group by nw, tx_ctr) a 
-		left join tx_outcome_denom b
-		on a.nw = b.nw and a.tx_ctr = b.tx_ctr
-		where ~missing(a.nw);
+		select *, b.rf_1yr_cnt*100/a.rf_1yr_denom as rf_1yr_pct 
+		from (select nw_denom as nw, txctr_denom as tx_ctr, 
+					 sum(rf_1yr_denom) as rf_1yr_denom
+			  from a.outcome_pt
+			  group by nw_denom, txctr_denom) a 
+		left join 
+			 (select nw, tx_ctr,
+			 		 max(sum(rf_1yr), 0) as rf_1yr_cnt,
+					 max(sum(eval_3m)*100/sum(eval_3m_denom), 0) as eval_3m_pct,
+					 max(sum(eval_6m)*100/sum(eval_6m_denom), 0) as eval_6m_pct,
+					 max(sum(wl_6m)*100/sum(wl_6m_denom), 0) as wl_6m_pct,
+					 max(sum(wl_2yr)*100/sum(wl_2yr_denom), 0) as wl_2yr_pct
+			  from a.outcome_pt
+			  group by nw, tx_ctr) b
+		on a.nw = b.nw and a.tx_ctr = b.tx_ctr;
 
-	create table tx_outcome_denom as 
-		select nw_denom as nw, txctr_denom as tx_ctr, count(*) as denom
-		from (select * from a.outcome_pt where preempt_rf ~= 1)
-		group by nw_denom, txctr_denom;
-	
 	create table a.tx_outcome_nopreemprf as 
-		select a.nw, a.tx_ctr, 
-			   a.rf_1yr_cnt*100/b.denom as rf_1yr_pct, 
-			   a.eval_3m_pct, a.eval_6m_pct, a.wl_6m_pct,
-			   a.wl_2yr_cnt*100/b.denom as wl_2yr_pct
-		from (select nw, tx_ctr, 
-					 sum(rf_1yr) as rf_1yr_cnt, 
-					 sum(eval_3m)*100/count(eval_3m) as eval_3m_pct, 
-					 sum(eval_6m)*100/count(eval_6m) as eval_6m_pct, 
-					 sum(wl_6m)*100/count(wl_6m) as wl_6m_pct, 
-					 sum(wl_2yr) as wl_2yr_cnt 
-					 from (select * from a.outcome_pt where preempt_rf ~= 1)
-					 group by nw, tx_ctr) a 
-		left join tx_outcome_denom b
-		on a.nw = b.nw and a.tx_ctr = b.tx_ctr
-		where ~missing(a.nw);
-
-	drop table tx_outcome_denom;
+		select *, b.rf_1yr_cnt*100/a.rf_1yr_denom as rf_1yr_pct 
+		from (select nw_denom as nw, txctr_denom as tx_ctr, 
+					 sum(rf_1yr_denom) as rf_1yr_denom
+			  from (select * from a.outcome_pt where preempt_rf ~= 1)
+			  group by nw_denom, txctr_denom) a 
+		left join 
+			 (select nw, tx_ctr,
+			 		 max(sum(rf_1yr), 0) as rf_1yr_cnt,
+					 max(sum(eval_3m)*100/sum(eval_3m_denom), 0) as eval_3m_pct,
+					 max(sum(eval_6m)*100/sum(eval_6m_denom), 0) as eval_6m_pct,
+					 max(sum(wl_6m)*100/sum(wl_6m_denom), 0) as wl_6m_pct,
+					 max(sum(wl_2yr)*100/sum(wl_2yr_denom), 0) as wl_2yr_pct
+			  from (select * from a.outcome_pt where preempt_rf ~= 1)
+			  group by nw, tx_ctr) b
+		on a.nw = b.nw and a.tx_ctr = b.tx_ctr;
 quit;
 
 ****************************************** Percentage per month *********************************************;
@@ -260,6 +246,169 @@ data date_denom;
 	wl_among_all_date_denom = intnx('month', min(first_se, edate), 0);
 	format rf_date_denom eval_date_denom wl_date_denom wl_among_all_date_denom mmddyy10.;
 run;
+data date_denom_nopre;
+	set date_denom;
+	if preempt_rf ~= 1;
+run;
+
+proc sql;
+	create table rf_pct_month as
+		select a.nw, a.tx_ctr, a.date, max(0, b.rf_1yr)*100/a.denom_cnt as rf_1yr_pct
+		from (select nw_denom as nw, 
+					 txctr_denom as tx_ctr, 
+					 rf_date_denom as date, 
+					 count(*) as denom_cnt
+			  from date_denom
+			  group by nw_denom, txctr_denom, rf_date_denom) a 
+		left join (select nw, tx_ctr, 
+						  rf_date_denom as date, 
+						  sum(rf_1yr) as rf_1yr
+				   from date_denom 
+				   group by nw, tx_ctr, rf_date_denom) b
+		on a.nw = b.nw and a.tx_ctr = b.tx_ctr and a.date = b.date
+		where mdy(1, 1, 2015) <= a.date <= mdy(6, 30, 2020) and a.nw > .;
+
+	create table eval_pct_month as
+		select a.nw, a.tx_ctr, a.date, max(0, b.eval_3m)*100/a.denom_cnt as eval_3m_pct
+		from (select nw, tx_ctr, 
+					 eval_date_denom as date, 
+					 count(*) as denom_cnt
+			  from date_denom
+			  group by nw, tx_ctr, eval_date_denom) a 
+		left join (select nw, tx_ctr, 
+						  eval_date_denom as date, 
+						  sum(eval_3m) as eval_3m
+				   from date_denom 
+				   group by nw, tx_ctr, eval_date_denom) b
+		on a.nw = b.nw and a.tx_ctr = b.tx_ctr and a.date = b.date
+		where mdy(1, 1, 2015) <= a.date <= mdy(6, 30, 2020) and a.nw > .;
+
+	create table eval2_pct_month as
+		select a.nw, a.tx_ctr, a.date, max(0, b.eval_6m)*100/a.denom_cnt as eval_6m_pct
+		from (select nw, tx_ctr, 
+					 eval_date_denom as date, 
+					 count(*) as denom_cnt
+			  from date_denom
+			  group by nw, tx_ctr, eval_date_denom) a 
+		left join (select nw, tx_ctr, 
+						  eval_date_denom as date, 
+						  sum(eval_6m) as eval_6m
+				   from date_denom 
+				   group by nw, tx_ctr, eval_date_denom) b
+		on a.nw = b.nw and a.tx_ctr = b.tx_ctr and a.date = b.date
+		where mdy(1, 1, 2015) <= a.date <= mdy(6, 30, 2020) and a.nw > .;
+
+	create table wl_pct_month as
+		select a.nw, a.tx_ctr, a.date, max(0, b.wl_6m)*100/a.denom_cnt as wl_6m_pct
+		from (select nw, tx_ctr, 
+					 wl_date_denom as date, 
+					 count(*) as denom_cnt
+			  from date_denom
+			  group by nw, tx_ctr, wl_date_denom) a 
+		left join (select nw, tx_ctr, 
+						  wl_date_denom as date, 
+						  sum(wl_6m) as wl_6m
+				   from date_denom 
+				   group by nw, tx_ctr, wl_date_denom) b
+		on a.nw = b.nw and a.tx_ctr = b.tx_ctr and a.date = b.date
+		where mdy(1, 1, 2015) <= a.date <= mdy(6, 30, 2020) and a.nw > .;
+
+	create table wl2_pct_month as
+		select a.nw, a.tx_ctr, a.date, max(0, b.wl_2yr)*100/a.denom_cnt as wl_2yr_pct
+		from (select nw_denom as nw, 
+					 txctr_denom as tx_ctr, 
+					 wl_among_all_date_denom as date, 
+					 count(*) as denom_cnt
+			  from date_denom
+			  group by nw_denom, txctr_denom, wl_among_all_date_denom) a 
+		left join (select nw, tx_ctr, 
+						  wl_among_all_date_denom as date, 
+						  sum(wl_2yr) as wl_2yr
+				   from date_denom 
+				   group by nw, tx_ctr, wl_among_all_date_denom) b
+		on a.nw = b.nw and a.tx_ctr = b.tx_ctr and a.date = b.date
+		where mdy(1, 1, 2015) <= a.date <= mdy(6, 30, 2020) and a.nw > .;
+
+	*********************************************************************************************************
+	*********************************************************************************************************;
+
+	create table rf_pct_month_nopre as
+		select a.nw, a.tx_ctr, a.date, max(0, b.rf_1yr)*100/a.denom_cnt as rf_1yr_pct_nopre
+		from (select nw_denom as nw, 
+					 txctr_denom as tx_ctr, 
+					 rf_date_denom as date, 
+					 count(*) as denom_cnt
+			  from date_denom_nopre
+			  group by nw_denom, txctr_denom, rf_date_denom) a 
+		left join (select nw, tx_ctr, 
+						  rf_date_denom as date, 
+						  sum(rf_1yr) as rf_1yr
+				   from date_denom_nopre 
+				   group by nw, tx_ctr, rf_date_denom) b
+		on a.nw = b.nw and a.tx_ctr = b.tx_ctr and a.date = b.date
+		where mdy(1, 1, 2015) <= a.date <= mdy(6, 30, 2020) and a.nw > .;
+
+	create table eval_pct_month_nopre as
+		select a.nw, a.tx_ctr, a.date, max(0, b.eval_3m)*100/a.denom_cnt as eval_3m_pct_nopre
+		from (select nw, tx_ctr, 
+					 eval_date_denom as date, 
+					 count(*) as denom_cnt
+			  from date_denom_nopre
+			  group by nw, tx_ctr, eval_date_denom) a 
+		left join (select nw, tx_ctr, 
+						  eval_date_denom as date, 
+						  sum(eval_3m) as eval_3m
+				   from date_denom_nopre 
+				   group by nw, tx_ctr, eval_date_denom) b
+		on a.nw = b.nw and a.tx_ctr = b.tx_ctr and a.date = b.date
+		where mdy(1, 1, 2015) <= a.date <= mdy(6, 30, 2020) and a.nw > .;
+
+	create table eval2_pct_month_nopre as
+		select a.nw, a.tx_ctr, a.date, max(0, b.eval_6m)*100/a.denom_cnt as eval_6m_pct_nopre
+		from (select nw, tx_ctr, 
+					 eval_date_denom as date, 
+					 count(*) as denom_cnt
+			  from date_denom_nopre
+			  group by nw, tx_ctr, eval_date_denom) a 
+		left join (select nw, tx_ctr, 
+						  eval_date_denom as date, 
+						  sum(eval_6m) as eval_6m
+				   from date_denom_nopre 
+				   group by nw, tx_ctr, eval_date_denom) b
+		on a.nw = b.nw and a.tx_ctr = b.tx_ctr and a.date = b.date
+		where mdy(1, 1, 2015) <= a.date <= mdy(6, 30, 2020) and a.nw > .;
+
+	create table wl_pct_month_nopre as
+		select a.nw, a.tx_ctr, a.date, max(0, b.wl_6m)*100/a.denom_cnt as wl_6m_pct_nopre
+		from (select nw, tx_ctr, 
+					 wl_date_denom as date, 
+					 count(*) as denom_cnt
+			  from date_denom_nopre
+			  group by nw, tx_ctr, wl_date_denom) a 
+		left join (select nw, tx_ctr, 
+						  wl_date_denom as date, 
+						  sum(wl_6m) as wl_6m
+				   from date_denom_nopre 
+				   group by nw, tx_ctr, wl_date_denom) b
+		on a.nw = b.nw and a.tx_ctr = b.tx_ctr and a.date = b.date
+		where mdy(1, 1, 2015) <= a.date <= mdy(6, 30, 2020) and a.nw > .;
+
+	create table wl2_pct_month_nopre as
+		select a.nw, a.tx_ctr, a.date, max(0, b.wl_2yr)*100/a.denom_cnt as wl_2yr_pct_nopre
+		from (select nw_denom as nw, 
+					 txctr_denom as tx_ctr, 
+					 wl_among_all_date_denom as date, 
+					 count(*) as denom_cnt
+			  from date_denom_nopre
+			  group by nw_denom, txctr_denom, wl_among_all_date_denom) a 
+		left join (select nw, tx_ctr, 
+						  wl_among_all_date_denom as date, 
+						  sum(wl_2yr) as wl_2yr
+				   from date_denom_nopre 
+				   group by nw, tx_ctr, wl_among_all_date_denom) b
+		on a.nw = b.nw and a.tx_ctr = b.tx_ctr and a.date = b.date
+		where mdy(1, 1, 2015) <= a.date <= mdy(6, 30, 2020) and a.nw > .;
+quit;
 
 data dt;
 	set tx_trr;
@@ -272,109 +421,14 @@ data dt;
 	format date mmddyy10.;
 	keep network Tx_center_ID_in_Datafile_B date;
 	rename network = nw Tx_center_ID_in_Datafile_B = tx_ctr;
+	if date <= mdy(6, 30, 2020);
 run;
 
-
-proc sql;
-	create table test as
-		select nw_denom as nw, txctr_denom as tx_ctr, 
-			   rf_date_denom as date, count(*) as denom_cnt
-			   from date_denom 
-			   group by nw_denom, txctr_denom, rf_date_denom;
-
-	create table rf_pct_month as
-		select a.nw, a.tx_ctr, a.date, max(0, b.rf_1yr)*100/a.denom_cnt as rf_1yr_pct
-		from test a left join (select nw, tx_ctr, rf_date_denom as date, sum(rf_1yr) as rf_1yr
-							   from date_denom 
-							   group by nw, tx_ctr, rf_date_denom
-							   having ~missing(nw)) b
-		on a.nw = b.nw and a.tx_ctr = b.tx_ctr and a.date = b.date;
-
-	create table eval_pct_month as
-		select nw, tx_ctr, eval_date_denom as date, 
-			   sum(eval_3m)*100/count(eval_3m) as eval_3m_pct, 
-			   sum(eval_6m)*100/count(eval_6m) as eval_6m_pct
-		from date_denom
-		group by nw, tx_ctr, eval_date_denom
-		having ~missing(nw);
-
-	create table wl_pct_month as
-		select nw, tx_ctr, wl_date_denom as date, 
-			   sum(wl_6m)*100/count(wl_6m) as wl_6m_pct
-		from date_denom
-		group by nw, tx_ctr, wl_date_denom
-		having ~missing(nw);
-
-	create table wl_among_all_pct_month as
-		select a.nw, a.tx_ctr, a.date, max(0, b.wl_2yr)*100/a.denom_cnt as wl_2yr_pct
-		from test a left join (select nw, tx_ctr, wl_among_all_date_denom as date, sum(wl_2yr) as wl_2yr
-							   from date_denom 
-							   group by nw, tx_ctr, wl_among_all_date_denom
-							   having ~missing(nw)) b
-		on a.nw = b.nw and a.tx_ctr = b.tx_ctr and a.date = b.date;
-
-	*********************************************************************************************************
-	*********************************************************************************************************;
-	create table test as
-		select nw_denom as nw, txctr_denom as tx_ctr, 
-			   rf_date_denom as date, count(*) as denom_cnt
-			   from (select * from date_denom where preempt_rf ~= 1)
-			   group by nw_denom, txctr_denom, rf_date_denom;
-
-	create table rf_pct_month_nopre as
-		select a.nw, a.tx_ctr, a.date, max(0, b.rf_1yr)*100/a.denom_cnt as rf_1yr_pct_nopre
-		from test a left join (select nw, tx_ctr, rf_date_denom as date, sum(rf_1yr) as rf_1yr
-							   from (select * from date_denom where preempt_rf ~= 1) 
-							   group by nw, tx_ctr, rf_date_denom
-							   having ~missing(nw)) b
-		on a.nw = b.nw and a.tx_ctr = b.tx_ctr and a.date = b.date;
-
-
-	create table eval_pct_month_nopre as
-		select nw, tx_ctr, eval_date_denom as date, 
-			   sum(eval_3m)*100/count(eval_3m) as eval_3m_pct_nopre, 
-			   sum(eval_6m)*100/count(eval_6m) as eval_6m_pct_nopre
-		from (select * from date_denom where preempt_rf ~= 1)
-		group by nw, tx_ctr, eval_date_denom
-		having ~missing(nw);
-
-	create table wl_pct_month_nopre as
-		select nw, tx_ctr, wl_date_denom as date, 
-			   sum(wl_6m)*100/count(wl_6m) as wl_6m_pct_nopre
-		from (select * from date_denom where preempt_rf ~= 1)
-		group by nw, tx_ctr, wl_date_denom
-		having ~missing(nw);
-
-	create table wl_among_all_pct_month_nopre as
-		select a.nw, a.tx_ctr, a.date, max(0, b.wl_2yr)*100/a.denom_cnt as wl_2yr_pct_nopre
-		from test a left join (select nw, tx_ctr, wl_among_all_date_denom as date, sum(wl_2yr) as wl_2yr
-							   from (select * from date_denom where preempt_rf ~= 1)
-							   group by nw, tx_ctr, wl_among_all_date_denom
-							   having ~missing(nw)) b
-		on a.nw = b.nw and a.tx_ctr = b.tx_ctr and a.date = b.date;
-
-
-	create table outcome_month as
-		select z.*, a.rf_1yr_pct, b.eval_3m_pct, b.eval_6m_pct, c.wl_6m_pct, g.wl_2yr_pct,
-			   d.rf_1yr_pct_nopre, e.eval_3m_pct_nopre, e.eval_6m_pct_nopre, f.wl_6m_pct_nopre, h.wl_2yr_pct_nopre
-		from dt z left join rf_pct_month a
-		on z.nw = a.nw and z.tx_ctr = a.tx_ctr and z.date = a.date
-		left join eval_pct_month b
-		on z.nw = b.nw and z.tx_ctr = b.tx_ctr and z.date = b.date
-		left join wl_pct_month c
-		on z.nw = c.nw and z.tx_ctr = c.tx_ctr and z.date = c.date
-		left join rf_pct_month_nopre d
-		on z.nw = d.nw and z.tx_ctr = d.tx_ctr and z.date = d.date
-		left join eval_pct_month_nopre e
-		on z.nw = e.nw and z.tx_ctr = e.tx_ctr and z.date = e.date
-		left join wl_pct_month_nopre f
-		on z.nw = f.nw and z.tx_ctr = f.tx_ctr and z.date = f.date
-		left join wl_among_all_pct_month g
-		on z.nw = g.nw and z.tx_ctr = g.tx_ctr and z.date = g.date
-		left join wl_among_all_pct_month_nopre h
-		on z.nw = h.nw and z.tx_ctr = h.tx_ctr and z.date = h.date
-		where z.date <= mdy(6, 30, 2020);
-quit;
+data outcome_month;
+	merge dt rf_pct_month eval_pct_month eval2_pct_month wl_pct_month wl2_pct_month 
+		  rf_pct_month_nopre eval_pct_month_nopre eval2_pct_month_nopre wl_pct_month_nopre wl2_pct_month_nopre;
+	by nw tx_ctr date;
+run;
 
 proc stdize data = outcome_month out=a.outcome_month reponly missing=0;
 run;

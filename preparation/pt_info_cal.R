@@ -16,4 +16,7 @@ dt <- read_sas("outcome_pt.sas7bdat") %>%
   select(nw, tx_ctr, preempt_rf, rf, rf_1yr, eval, eval_3m, eval_6m, wl, wl_6m, wl_2yr,
          RACE, SEX, HISPANIC, INC_AGE, AGE, INSURANCE)
 
-saveRDS(dt, "public/data/pt_info.rds")
+dt_nopre <- dt %>% filter(preempt_rf != 1)
+
+saveRDS(dt, "pt_info.rds")
+saveRDS(dt_nopre, "pt_info_nopre.rds")
