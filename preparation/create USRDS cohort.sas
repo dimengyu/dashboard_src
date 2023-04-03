@@ -59,7 +59,7 @@ data medevid;
 		else if medicalcoverage='2,6' then insurance_esrd=4; *DVA and Other = other;
 		else if medicalcoverage='3,4' then insurance_esrd=2; *Medicare and Medicare Advantage = medicare;
 		else if medicalcoverage='3,5' then insurance_esrd=3; *Medicare and Employer = employer;
-		else if medicalcoverage='3,5,6' then insurance_esrd=3; *Medicare, Employer, and Other' = employer;
+		else if medicalcoverage='3,5,6' then insurance_esrd=3; *Medicare, Employer, and Other = employer;
 		else if medicalcoverage='3,6' then insurance_esrd=2; *Medicare and Other = medicare;
 		else if medicalcoverage='5,6' then insurance_esrd=3; *Employer and Other = employer;
 
